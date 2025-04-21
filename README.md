@@ -1,0 +1,1 @@
+Example for adding entities to a Home Assistant via MQTT without writing a config yaml file.
