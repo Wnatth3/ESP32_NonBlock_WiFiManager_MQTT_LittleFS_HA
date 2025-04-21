@@ -17,7 +17,7 @@
 #include <Button2.h>
 
 //******************************** Configulation ****************************//
-#define DebugMode  // Uncomment this line if you want to debug
+#define _DEBUG_  // Uncomment this line if you want to debug
 
 //******************************** Variables & Objects **********************//
 #define deviceName "MyESP32"
@@ -66,20 +66,28 @@ TickTwo tReconnectMqtt(reconnectMqtt, 3000, 0, MILLIS);
 //******************************** Functions ********************************//
 //----------------- SPIFFS --------------------//
 void loadConfigration() {
-    // clean FS, for testing
-    // SPIFFS.format();
+// clean FS, for testing
+// SPIFFS.format();
 
-    // read configuration from FS json
+// read configuration from FS json
+#ifdef _DEBUG_
     Serial.println(F("mounting FS..."));
+#endif
 
     if (SPIFFS.begin()) {
+#ifdef _DEBUG_
         Serial.println(F("mounted file system"));
+#endif
         if (SPIFFS.exists("/config.json")) {
-            // file exists, reading and loading
+// file exists, reading and loading
+#ifdef _DEBUG_
             Serial.println(F("reading config file"));
+#endif
             File configFile = SPIFFS.open("/config.json", "r");
             if (configFile) {
+#ifdef _DEBUG_
                 Serial.println(F("opened config file"));
+#endif
                 size_t size = configFile.size();
                 // Allocate a buffer to store contents of the file.
                 std::unique_ptr<char[]> buf(new char[size]);
@@ -89,19 +97,25 @@ void loadConfigration() {
                 auto         deserializeError = deserializeJson(json, buf.get());
                 serializeJson(json, Serial);
                 if (!deserializeError) {
+#ifdef _DEBUG_
                     Serial.println(F("\nparsed json"));
+#endif
                     strcpy(mqttBroker, json["mqttBroker"]);
                     strcpy(mqttPort, json["mqttPort"]);
                     strcpy(mqttUser, json["mqttUser"]);
                     strcpy(mqttPass, json["mqttPass"]);
                     storedValues = json["storedValues"];
                 } else {
+#ifdef _DEBUG_
                     Serial.println(F("failed to load json config"));
+#endif
                 }
             }
         }
     } else {
+#ifdef _DEBUG_
         Serial.println(F("failed to mount FS"));
+#endif
     }
 }
 
@@ -111,14 +125,16 @@ void saveConfigCallback() {
     strcpy(mqttPort, customMqttPort.getValue());
     strcpy(mqttUser, customMqttUser.getValue());
     strcpy(mqttPass, customMqttPass.getValue());
-    // Serial.println("The values in the file are: ");
-    // Serial.println("\tmqtt_broker : " + String(mqttBroker));
-    // Serial.println("\tmqtt_port : " + String(mqttPort));
-    // Serial.println("\tmqtt_user : " + String(mqttUser));
-    // Serial.println("\tmqtt_pass : " + String(mqttPass));
+// Serial.println("The values in the file are: ");
+// Serial.println("\tmqtt_broker : " + String(mqttBroker));
+// Serial.println("\tmqtt_port : " + String(mqttPort));
+// Serial.println("\tmqtt_user : " + String(mqttUser));
+// Serial.println("\tmqtt_pass : " + String(mqttPass));
 
-    // save the custom parameters to FS
+// save the custom parameters to FS
+#ifdef _DEBUG_
     Serial.println(F("saving config"));
+#endif
     JsonDocument json;
     json["mqttBroker"] = mqttBroker;
     json["mqttPort"]   = mqttPort;
@@ -132,7 +148,9 @@ void saveConfigCallback() {
 
     File configFile = SPIFFS.open("/config.json", "w");
     if (!configFile) {
+#ifdef _DEBUG_
         Serial.println(F("failed to open config file for writing"));
+#endif
     }
 
     serializeJson(json, Serial);
@@ -141,15 +159,19 @@ void saveConfigCallback() {
     configFile.close();
     // end save
 
+#ifdef _DEBUG_
     Serial.println(F("\nlocal ip"));
     Serial.println(WiFi.localIP());
     Serial.println(WiFi.gatewayIP());
     Serial.println(WiFi.subnetMask());
     Serial.println(WiFi.dnsIP());
+#endif
 
     if (storedValues) {
+#ifdef _DEBUG_
         Serial.print(F("Setting MQTT Broker: "));
         Serial.println(mqttBroker);
+#endif
         mqtt.setServer(mqttBroker, atoi(mqttPort));
         tConnectMqtt.start();
     }
@@ -161,7 +183,9 @@ void saveConfigCallback() {
 
 //----------------- Wifi Manager --------------//
 void wifiManagerSetup() {
+#ifdef _DEBUG_
     Serial.println(F("Loading configuration..."));
+#endif
     loadConfigration();
 
     // add all your parameters here
@@ -173,19 +197,26 @@ void wifiManagerSetup() {
     wifiManager.setDarkMode(true);
     // wifiManager.setConfigPortalTimeout(60);  // auto close configportal after 30 seconds
     wifiManager.setConfigPortalBlocking(false);
-
+#ifdef _DEBUG_
     Serial.println(F("Saving configuration..."));
+#endif
     wifiManager.setSaveConfigCallback(saveConfigCallback);
 
     if (wifiManager.autoConnect(deviceName, "password")) {
+#ifdef _DEBUG_
         Serial.println(F("connected...yeey :D"));
+#endif
     } else {
+#ifdef _DEBUG_
         Serial.println(F("Configportal running"));
+#endif
     }
 }
 
 void subscribeMqtt() {
+#ifdef _DEBUG_
     Serial.println(F("Subscribing to the MQTT topics..."));
+#endif
     mqtt.subscribe("oxy/switch/set");
 }
 //----------------- Add MQTT Entities to HA ---//
@@ -194,7 +225,9 @@ void addMqttEntities() {
     char oxySwitchBuff[512];
 
     JsonDocument doc;
+#ifdef _DEBUG_
     Serial.println(F("Adding the myTemp entity"));
+#endif
     doc.clear();
     doc["name"]                = "My Temp";
     doc["unique_id"]           = "myTemp";
@@ -205,7 +238,9 @@ void addMqttEntities() {
     serializeJson(doc, myTempBuff);
     mqtt.publish("homeassistant/sensor/myTemp/config", myTempBuff, true);
 
+#ifdef _DEBUG_
     Serial.println(F("Adding the oxySwitch entity"));
+#endif
     doc.clear();
     doc["name"]          = "Oxy Switch";
     doc["unique_id"]     = "oxySwitch";
@@ -228,10 +263,14 @@ void publishMqtt() {
 //----------------- Connect MQTT --------------//
 void reconnectMqtt() {
     if (WiFi.status() == WL_CONNECTED) {
+#ifdef _DEBUG_
         Serial.println(F("Connecting MQTT... "));
+#endif
         if (mqtt.connect(deviceName, mqttUser, mqttPass)) {
             tReconnectMqtt.stop();
+#ifdef _DEBUG_
             Serial.println(F("connected"));
+#endif
             tConnectMqtt.interval(0);
             tConnectMqtt.start();
             statusLed.blinkNumberOfTimes(200, 200, 3);  // 200ms ON, 200ms OFF, repeat 3 times, blink immediately
@@ -239,10 +278,12 @@ void reconnectMqtt() {
             addMqttEntities();
             publishMqtt();
         } else {
+#ifdef _DEBUG_
             Serial.print(F("failed state: "));
             Serial.println(mqtt.state());
             Serial.print(F("counter: "));
             Serial.println(tReconnectMqtt.counter());
+#endif
             if (tReconnectMqtt.counter() >= 3) {
                 // ESP.restart();
                 tReconnectMqtt.stop();
@@ -252,7 +293,11 @@ void reconnectMqtt() {
             }
         }
     } else {
-        if (tReconnectMqtt.counter() <= 1) Serial.println(F("WiFi is not connected"));
+        if (tReconnectMqtt.counter() <= 1) {
+#ifdef _DEBUG_
+            Serial.println(F("WiFi is not connected"));
+#endif
+        }
     }
 }
 
@@ -268,11 +313,15 @@ void connectMqtt() {
 //----------------- Reset WiFi Button ---------//
 void resetWifiBtPressed(Button2& btn) {
     statusLed.turnON();
+#ifdef _DEBUG_
     Serial.println(F("Deleting the config file and resetting WiFi."));
+#endif
     SPIFFS.format();
     wifiManager.resetSettings();
+#ifdef _DEBUG_
     Serial.print(deviceName);
     Serial.println(F(" is restarting."));
+#endif
     ESP.restart();
 }
 
@@ -296,11 +345,11 @@ void toggleTestLed(Button2& btn) {
     if (testLed.getOnOff() == LED_MODE_ON) {
         testLedState = LED_MODE_ON;
         pf.putBool("testledState", LED_MODE_ON);
-        mqtt.publish("oxy/switch", "ON");        
+        mqtt.publish("oxy/switch", "ON");
     } else {
         testLedState = LED_MODE_OFF;
         pf.putBool("testledState", LED_MODE_OFF);
-        mqtt.publish("oxy/switch", "OFF");        
+        mqtt.publish("oxy/switch", "OFF");
     }
 }
 
