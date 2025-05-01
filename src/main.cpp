@@ -39,7 +39,7 @@ ezLED airPump(airPumpPin);
 
 //----------------- Preferences ---------------//
 #define kAirPumpSt "airPumpSt"
-bool airPumpState = false;
+bool        airPumpState = false;
 Preferences pf;
 
 //----------------- Reset WiFi Button ---------//
@@ -180,7 +180,6 @@ void saveParamsCallback() {
 
     // Delete existing file, otherwise the configuration is appended to the file
     // LittleFS.remove(filename);
-
     File file = LittleFS.open(filename, "w");
     if (!file) {
 #ifdef _DEBUG_
@@ -375,6 +374,7 @@ void addMqttEntities() {
 void publishMqtt() {
     airPumpState == true ? mqtt.publish(stateTopicAirPumpSw, "ON") : mqtt.publish(stateTopicAirPumpSw, "OFF");
 }
+
 //----------------- Connect MQTT --------------//
 void reconnectMqtt() {
     if (WiFi.status() == WL_CONNECTED) {
@@ -450,7 +450,7 @@ void toggleTestLed(Button2& btn) {
     }
 }
 
-void updateTestLed() {
+void updateAirPumpState() {
     airPumpState = pf.getBool(kAirPumpSt, false);
 #ifdef _DEBUG_
     Serial.print(kAirPumpSt);
@@ -478,12 +478,6 @@ void readSendData() {
 void setup() {
     Serial.begin(115200);
     pf.begin("myPrefs", false);
-    statusLed.turnOFF();
-    updateTestLed();
-    resetWifiBt.begin(resetWifiBtPin);
-    resetWifiBt.setTapHandler(toggleTestLed);
-    resetWifiBt.setLongClickTime(5000);
-    resetWifiBt.setLongClickDetectedHandler(resetWifiBtPressed);
     // Initialize LittleFS library
     while (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
 #ifdef _DEBUG_
@@ -491,6 +485,12 @@ void setup() {
 #endif
         delay(1000);
     }
+    statusLed.turnOFF();
+    updateAirPumpState();
+    resetWifiBt.begin(resetWifiBtPin);
+    resetWifiBt.setTapHandler(toggleTestLed);
+    resetWifiBt.setLongClickTime(5000);
+    resetWifiBt.setLongClickDetectedHandler(resetWifiBtPressed);
     dht.begin();
     wifiManagerSetup();
     mqttInit();
