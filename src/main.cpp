@@ -15,6 +15,7 @@
 #include <PubSubClient.h>
 #include <Button2.h>
 #include <ezLED.h>
+#include <DHT.h>
 #include <TickTwo.h>
 
 //******************************** Configulation ****************************//
@@ -31,7 +32,7 @@ const char* filename = "/config.txt";  // Config file name
 bool mqttParameter;
 //----------------- esLED ---------------------//
 #define ledPin     LED_BUILTIN
-#define testLedPin 12
+#define testLedPin 4
 
 ezLED statusLed(ledPin);
 ezLED testLed(testLedPin);
@@ -39,6 +40,7 @@ ezLED testLed(testLedPin);
 bool testLedState = false;
 
 //----------------- Preferences ---------------//
+#define kLed "ledSt"
 bool        testledState;
 Preferences pf;
 
@@ -60,14 +62,34 @@ WiFiManagerParameter customMqttUser("user", "mqtt user", mqttUser, 10);
 WiFiManagerParameter customMqttPass("pass", "mqtt pass", mqttPass, 10);
 
 //----------------- MQTT ----------------------//
+#define stateTopicDht22Temp   "dht22/temp"
+#define configTopicDht22Temp  "homeassistant/sensor/dht22Temp/config"
+#define stateTopicDht22Humi   "dht22/humi"
+#define configTopicDht22Humi  "homeassistant/sensor/dht22Humi/config"
+#define stateTopicAirPumpSw   "airPump/switch"
+#define commandTopicAirPumpSw "airPump/switch/set"
+#define configTopicAirPumpSw  "homeassistant/switch/airPumpSw/config"
+
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
+
+//----------------- DHT22 ---------------------//
+#define DHTPIN  33
+#define DHTTYPE DHT22
+
+float temp;
+float humi;
+
+DHT dht(DHTPIN, DHTTYPE);
 
 //******************************** Tasks ************************************//
 void    connectMqtt();
 void    reconnectMqtt();
 TickTwo tConnectMqtt(connectMqtt, 0, 0, MILLIS);  // (function, interval, iteration, interval unit)
 TickTwo tReconnectMqtt(reconnectMqtt, 3000, 0, MILLIS);
+
+void    readSendData();
+TickTwo tReadSendData(readSendData, 1000, 0, MILLIS);  // (function, interval, iteration, interval unit)
 
 //******************************** Functions ********************************//
 //----------------- LittleFS ------------------//
@@ -108,11 +130,11 @@ void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
         message += (char)payload[i];
     }
 
-    if (String(topic) == "oxy/switch/set") {
+    if (String(topic) == commandTopicAirPumpSw) {
         if (message == "ON") {
-            statusLed.turnON();
+            testLed.turnON();
         } else if (message == "OFF") {
-            statusLed.turnOFF();
+            testLed.turnOFF();
         }
     }
 }
@@ -125,6 +147,7 @@ void mqttInit() {
 #ifdef _DEBUG_
         Serial.println(F(" available"));
 #endif
+        mqtt.setBufferSize(512);
         mqtt.setCallback(handleMqttMessage);
         mqtt.setServer(mqttBroker, atoi(mqttPort));
         tConnectMqtt.start();
@@ -264,56 +287,83 @@ void subscribeMqtt() {
 #ifdef _DEBUG_
     Serial.println(F("Subscribing to the MQTT topics..."));
 #endif
-    mqtt.subscribe("oxy/switch/set");
+    mqtt.subscribe(commandTopicAirPumpSw);
 }
 //----------------- Add MQTT Entities to HA ---//
 void addMqttEntities() {
-    char myTempBuff[512];
-    char oxySwitchBuff[512];
+    char dht22TempBuff[512];
+    char dht22HumiBuff[512];
+    char airPupmSwBuff[512];
 
     JsonDocument doc;
 #ifdef _DEBUG_
-    Serial.println(F("Adding the myTemp entity"));
+    Serial.println(F("Adding the DHT22Temp entity"));
 #endif
     doc.clear();
-    doc["name"]                = "My Temp";
-    doc["unique_id"]           = "myTemp";
-    doc["state_topic"]         = "sensor/myTemp";
+    doc["name"]                = "Temp";
+    doc["unique_id"]           = "dht22Temp";
+    doc["state_topic"]         = stateTopicDht22Temp;
     doc["unit_of_measurement"] = "°C";
     doc["value_template"]      = "{{ value | float }}";
+    JsonObject device          = doc["device"].to<JsonObject>();
+    device["identifiers"][0]   = "dht22";
+    device["name"]             = "DHT22";
     doc.shrinkToFit();  // optional
-    serializeJson(doc, myTempBuff);
+    serializeJson(doc, dht22TempBuff);
 #ifndef _RemoveEntity
-    mqtt.publish("homeassistant/sensor/myTemp/config", myTempBuff, true);
+    mqtt.publish(configTopicDht22Humi, dht22TempBuff, true);
 #else
-    mqtt.publish("homeassistant/sensor/myTemp/config", "", true);
+    mqtt.publish(configTopicDht22Humi, "", true);
 #endif
 
 #ifdef _DEBUG_
-    Serial.println(F("Adding the oxySwitch entity"));
+    Serial.println(F("Adding the DHT22Humi entity"));
 #endif
     doc.clear();
-    doc["name"]          = "Oxy Switch";
-    doc["unique_id"]     = "oxySwitch";
-    doc["state_topic"]   = "oxy/switch";
-    doc["command_topic"] = "oxy/switch/set";
-    doc["payload_on"]    = "ON";
-    doc["payload_off"]   = "OFF";
-    doc["state_on"]      = "ON";
-    doc["state_off"]     = "OFF";
-    doc["state_off"]     = "OFF";
-    doc["optimistic"]    = true;
+    doc["name"]                = "Humi";
+    doc["unique_id"]           = "dht22Humi";
+    doc["state_topic"]         = stateTopicDht22Humi;
+    doc["unit_of_measurement"] = "%";
+    doc["value_template"]      = "{{ value | float }}";
+    JsonObject device1         = doc["device"].to<JsonObject>();
+    device1["identifiers"][0]  = "dht22";
+    device1["name"]            = "DHT22";
     doc.shrinkToFit();  // optional
-    serializeJson(doc, oxySwitchBuff);
+    serializeJson(doc, dht22HumiBuff);
 #ifndef _RemoveEntity
-    mqtt.publish("homeassistant/switch/oxySwtich/config", oxySwitchBuff, true);
+    mqtt.publish(configTopicDht22Humi, dht22HumiBuff, true);
 #else
-    mqtt.publish("homeassistant/switch/oxySwtich/config", "", true);
+    mqtt.publish(configTopicDht22Humi, "", true);
+#endif
+
+#ifdef _DEBUG_
+    Serial.println(F("Adding the airPumpSw entity"));
+#endif
+    doc.clear();
+    doc["name"]               = "Switch";
+    doc["unique_id"]          = "airPumpSw";
+    doc["state_topic"]        = stateTopicAirPumpSw;
+    doc["command_topic"]      = commandTopicAirPumpSw;
+    doc["payload_on"]         = "ON";
+    doc["payload_off"]        = "OFF";
+    doc["state_on"]           = "ON";
+    doc["state_off"]          = "OFF";
+    doc["state_off"]          = "OFF";
+    doc["optimistic"]         = true;
+    JsonObject device3        = doc["device"].to<JsonObject>();
+    device3["identifiers"][0] = "airPump";
+    device3["name"]           = "Air Pump";
+    doc.shrinkToFit();  // optional
+    serializeJson(doc, airPupmSwBuff);
+#ifndef _RemoveEntity
+    mqtt.publish(configTopicAirPumpSw, airPupmSwBuff, true);
+#else
+    mqtt.publish(configTopicAirPumpSw, "", true);
 #endif
 }
 
 void publishMqtt() {
-    testLedState == true ? mqtt.publish("oxy/swtich", "ON") : mqtt.publish("oxy/switch", "OFF");
+    testLedState == true ? mqtt.publish(stateTopicAirPumpSw, "ON") : mqtt.publish(stateTopicAirPumpSw, "OFF");
 }
 //----------------- Connect MQTT --------------//
 void reconnectMqtt() {
@@ -383,32 +433,67 @@ void toggleTestLed(Button2& btn) {
     testLed.toggle();
     if (testLed.getOnOff() == LED_MODE_ON) {
         testLedState = LED_MODE_ON;
-        pf.putBool("testledState", LED_MODE_ON);
-        mqtt.publish("oxy/switch", "ON");
+        pf.putBool(kLed, true);
+#ifdef _DEBUG_
+        Serial.print(F("Test LED State "));
+        Serial.println(pf.getBool(kLed));
+#endif
+        mqtt.publish(stateTopicAirPumpSw, "ON");
     } else {
         testLedState = LED_MODE_OFF;
-        pf.putBool("testledState", LED_MODE_OFF);
-        mqtt.publish("oxy/switch", "OFF");
+        pf.putBool(kLed, false);
+#ifdef _DEBUG_
+        Serial.print(F("Test LED State "));
+        Serial.println(pf.getBool(kLed));
+#endif
+        mqtt.publish(stateTopicAirPumpSw, "OFF");
     }
 }
 
 void updateTestLed() {
-    testLedState = pf.getBool("testLedState", false);
-    testLedState == LED_MODE_ON ? testLed.turnON() : testLed.turnOFF();
+    testLedState = pf.getBool(kLed, false);
+#ifdef _DEBUG_
+    Serial.print(F("Test LED State "));
+    Serial.println(testLedState);
+#endif
+    testLedState ? testLed.turnON() : testLed.turnOFF();
+}
+
+void readSendData() {
+    temp = dht.readTemperature();
+    humi = dht.readHumidity();
+#ifdef _DEBUG_
+    Serial.print(F("Temp: "));
+    Serial.print(temp);
+    Serial.print(F(" °C, Humi: "));
+    Serial.print(humi);
+    Serial.println(F(" %"));
+#endif
+    mqtt.publish(stateTopicDht22Temp, String(temp).c_str());
+    mqtt.publish(stateTopicDht22Humi, String(humi).c_str());
 }
 
 //********************************  Setup ***********************************//
 void setup() {
+    Serial.begin(115200);
+    pf.begin("myPrefs", false);
     statusLed.turnOFF();
     updateTestLed();
     resetWifiBt.begin(resetWifiBtPin);
     resetWifiBt.setTapHandler(toggleTestLed);
     resetWifiBt.setLongClickTime(5000);
     resetWifiBt.setLongClickDetectedHandler(resetWifiBtPressed);
-    Serial.begin(115200);
-
+    // Initialize LittleFS library
+    while (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+#ifdef _DEBUG_
+        Serial.println(F("Failed to initialize LittleFS library"));
+#endif
+        delay(1000);
+    }
+    dht.begin();
     wifiManagerSetup();
     mqttInit();
+    tReadSendData.start();
 }
 
 //********************************  Loop ************************************//
@@ -418,4 +503,5 @@ void loop() {
     wifiManager.process();
     tConnectMqtt.update();
     tReconnectMqtt.update();
+    tReadSendData.update();
 }
