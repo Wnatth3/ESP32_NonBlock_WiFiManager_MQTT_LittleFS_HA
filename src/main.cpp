@@ -32,16 +32,14 @@ const char* filename = "/config.txt";  // Config file name
 bool mqttParameter;
 //----------------- esLED ---------------------//
 #define ledPin     LED_BUILTIN
-#define testLedPin 4
+#define airPumpPin 4
 
 ezLED statusLed(ledPin);
-ezLED testLed(testLedPin);
-
-bool testLedState = false;
+ezLED airPump(airPumpPin);
 
 //----------------- Preferences ---------------//
-#define kLed "ledSt"
-bool        testledState;
+#define kAirPumpSt "airPumpSt"
+bool airPumpState = false;
 Preferences pf;
 
 //----------------- Reset WiFi Button ---------//
@@ -124,17 +122,29 @@ void loadConfiguration(fs::FS& fs, const char* filename) {
     file.close();
 }
 
+void saveState(bool var, const char* key, bool state) {
+    var = state;
+    pf.putBool(key, state);
+#ifdef _DEBUG_
+    Serial.print(key);
+    Serial.print(F(": "));
+    Serial.println(pf.getBool(kAirPumpSt));
+#endif
+}
+
 void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
     String message;
     for (int i = 0; i < length; i++) {
         message += (char)payload[i];
     }
 
-    if (String(topic) == commandTopicAirPumpSw) {
+    if (!strcmp(topic, commandTopicAirPumpSw)) {
         if (message == "ON") {
-            testLed.turnON();
+            saveState(airPumpState, kAirPumpSt, true);
+            airPump.turnON();
         } else if (message == "OFF") {
-            testLed.turnOFF();
+            saveState(airPumpState, kAirPumpSt, false);
+            airPump.turnOFF();
         }
     }
 }
@@ -363,7 +373,7 @@ void addMqttEntities() {
 }
 
 void publishMqtt() {
-    testLedState == true ? mqtt.publish(stateTopicAirPumpSw, "ON") : mqtt.publish(stateTopicAirPumpSw, "OFF");
+    airPumpState == true ? mqtt.publish(stateTopicAirPumpSw, "ON") : mqtt.publish(stateTopicAirPumpSw, "OFF");
 }
 //----------------- Connect MQTT --------------//
 void reconnectMqtt() {
@@ -430,33 +440,24 @@ void resetWifiBtPressed(Button2& btn) {
 }
 
 void toggleTestLed(Button2& btn) {
-    testLed.toggle();
-    if (testLed.getOnOff() == LED_MODE_ON) {
-        testLedState = LED_MODE_ON;
-        pf.putBool(kLed, true);
-#ifdef _DEBUG_
-        Serial.print(F("Test LED State "));
-        Serial.println(pf.getBool(kLed));
-#endif
+    airPump.toggle();
+    if (airPump.getOnOff() == LED_MODE_ON) {
+        saveState(airPumpState, kAirPumpSt, true);
         mqtt.publish(stateTopicAirPumpSw, "ON");
     } else {
-        testLedState = LED_MODE_OFF;
-        pf.putBool(kLed, false);
-#ifdef _DEBUG_
-        Serial.print(F("Test LED State "));
-        Serial.println(pf.getBool(kLed));
-#endif
+        saveState(airPumpState, kAirPumpSt, false);
         mqtt.publish(stateTopicAirPumpSw, "OFF");
     }
 }
 
 void updateTestLed() {
-    testLedState = pf.getBool(kLed, false);
+    airPumpState = pf.getBool(kAirPumpSt, false);
 #ifdef _DEBUG_
-    Serial.print(F("Test LED State "));
-    Serial.println(testLedState);
+    Serial.print(kAirPumpSt);
+    Serial.print(F(": "));
+    Serial.println(airPumpState);
 #endif
-    testLedState ? testLed.turnON() : testLed.turnOFF();
+    airPumpState ? airPump.turnON() : airPump.turnOFF();
 }
 
 void readSendData() {
