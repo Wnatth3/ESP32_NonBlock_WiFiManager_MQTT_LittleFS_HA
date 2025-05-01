@@ -9,7 +9,7 @@
 #include <Arduino.h>
 #include <FS.h>
 #include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>  //https://github.com/bblanchon/ArduinoJson
 #include <PubSubClient.h>
@@ -18,11 +18,15 @@
 #include <TickTwo.h>
 
 //******************************** Configulation ****************************//
+#define FORMAT_LITTLEFS_IF_FAILED true
+
 #define _DEBUG_  // Comment this line if you don't want to debug
 // #define _RemoveEntity  // Uncomment this line if you want to remove the entity from Home Assistant
 
 //******************************** Variables & Objects **********************//
 #define deviceName "MyESP32"
+
+const char* filename = "/config.txt";  // Config file name
 
 bool mqttParameter;
 //----------------- esLED ---------------------//
@@ -66,59 +70,36 @@ TickTwo tConnectMqtt(connectMqtt, 0, 0, MILLIS);  // (function, interval, iterat
 TickTwo tReconnectMqtt(reconnectMqtt, 3000, 0, MILLIS);
 
 //******************************** Functions ********************************//
-//----------------- SPIFFS --------------------//
-void loadConfigration() {
-// clean FS, for testing
-// SPIFFS.format();
+//----------------- LittleFS ------------------//
+// Loads the configuration from a file
+void loadConfiguration(fs::FS& fs, const char* filename) {
+    // Open file for reading
+    File file = fs.open(filename, "r");
+    if (!file) {
+#ifdef _DEBUG_
+        Serial.println(F("Failed to open data file"));
+#endif
+        return;
+    }
 
-// read configuration from FS json
+    // Allocate a temporary JsonDocument
+    JsonDocument doc;
+    // Deserialize the JSON document
+    DeserializationError error = deserializeJson(doc, file);
+    if (error) {
 #ifdef _DEBUG_
-    Serial.println(F("mounting FS..."));
-#endif
-
-    if (SPIFFS.begin()) {
-#ifdef _DEBUG_
-        Serial.println(F("mounted file system"));
-#endif
-        if (SPIFFS.exists("/config.json")) {
-// file exists, reading and loading
-#ifdef _DEBUG_
-            Serial.println(F("reading config file"));
-#endif
-            File configFile = SPIFFS.open("/config.json", "r");
-            if (configFile) {
-#ifdef _DEBUG_
-                Serial.println(F("opened config file"));
-#endif
-                size_t size = configFile.size();
-                // Allocate a buffer to store contents of the file.
-                std::unique_ptr<char[]> buf(new char[size]);
-
-                configFile.readBytes(buf.get(), size);
-                JsonDocument json;
-                auto         deserializeError = deserializeJson(json, buf.get());
-                serializeJson(json, Serial);
-                if (!deserializeError) {
-#ifdef _DEBUG_
-                    Serial.println(F("\nparsed json"));
-#endif
-                    strcpy(mqttBroker, json["mqttBroker"]);
-                    strcpy(mqttPort, json["mqttPort"]);
-                    strcpy(mqttUser, json["mqttUser"]);
-                    strcpy(mqttPass, json["mqttPass"]);
-                    mqttParameter = json["mqttParameter"];
-                } else {
-#ifdef _DEBUG_
-                    Serial.println(F("failed to load json config"));
-#endif
-                }
-            }
-        }
-    } else {
-#ifdef _DEBUG_
-        Serial.println(F("failed to mount FS"));
+        Serial.println(F("Failed to read file, using default configuration"));
 #endif
     }
+    // Copy values from the JsonDocument to the Config
+    // strlcpy(Destination_Variable, doc["Source_Variable"] /*| "Default_Value"*/, sizeof(Destination_Name));
+    strlcpy(mqttBroker, doc["mqttBroker"], sizeof(mqttBroker));
+    strlcpy(mqttPort, doc["mqttPort"], sizeof(mqttPort));
+    strlcpy(mqttUser, doc["mqttUser"], sizeof(mqttUser));
+    strlcpy(mqttPass, doc["mqttPass"], sizeof(mqttPass));
+    mqttParameter = doc["mqttParameter"];
+
+    file.close();
 }
 
 void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
@@ -137,72 +118,110 @@ void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
 }
 
 void mqttInit() {
-    #ifdef _DEBUG_
-        Serial.print(F("MQTT parameters are "));
-    #endif
-        if (mqttParameter) {
-    #ifdef _DEBUG_
-            Serial.println(F(" available"));
-    #endif
-            mqtt.setCallback(handleMqttMessage);
-            mqtt.setServer(mqttBroker, atoi(mqttPort));
-            tConnectMqtt.start();
-        } else {
-    #ifdef _DEBUG_
-            Serial.println(F(" not available."));
-    #endif
-        }
+#ifdef _DEBUG_
+    Serial.print(F("MQTT parameters are "));
+#endif
+    if (mqttParameter) {
+#ifdef _DEBUG_
+        Serial.println(F(" available"));
+#endif
+        mqtt.setCallback(handleMqttMessage);
+        mqtt.setServer(mqttBroker, atoi(mqttPort));
+        tConnectMqtt.start();
+    } else {
+#ifdef _DEBUG_
+        Serial.println(F(" not available."));
+#endif
     }
-    
-void saveConfigCallback() {
-    // read updated parameters
+}
+
+void saveParamsCallback() {
+    // saveConfiguration(LittleFS, filename);
     strcpy(mqttBroker, customMqttBroker.getValue());
     strcpy(mqttPort, customMqttPort.getValue());
     strcpy(mqttUser, customMqttUser.getValue());
     strcpy(mqttPass, customMqttPass.getValue());
-// Serial.println("The values in the file are: ");
-// Serial.println("\tmqtt_broker : " + String(mqttBroker));
-// Serial.println("\tmqtt_port : " + String(mqttPort));
-// Serial.println("\tmqtt_user : " + String(mqttUser));
-// Serial.println("\tmqtt_pass : " + String(mqttPass));
-
-// save the custom parameters to FS
 #ifdef _DEBUG_
-    Serial.println(F("saving config"));
+    Serial.println(F("The values are updated."));
 #endif
-    JsonDocument json;
-    json["mqttBroker"] = mqttBroker;
-    json["mqttPort"]   = mqttPort;
-    json["mqttUser"]   = mqttUser;
-    json["mqttPass"]   = mqttPass;
 
-    if (json["mqttBroker"] != "") {
-        json["mqttParameter"] = true;
-        mqttParameter         = json["mqttParameter"];
+    // Delete existing file, otherwise the configuration is appended to the file
+    // LittleFS.remove(filename);
+
+    File file = LittleFS.open(filename, "w");
+    if (!file) {
+#ifdef _DEBUG_
+        Serial.println(F("Failed to open config file for writing"));
+#endif
+        return;
     }
 
-    File configFile = SPIFFS.open("/config.json", "w");
-    if (!configFile) {
+    // Allocate a temporary JsonDocument
+    JsonDocument doc;
+    // Set the values in the document
+    doc["mqttBroker"] = mqttBroker;
+    doc["mqttPort"]   = mqttPort;
+    doc["mqttUser"]   = mqttUser;
+    doc["mqttPass"]   = mqttPass;
 #ifdef _DEBUG_
-        Serial.println(F("failed to open config file for writing"));
+    Serial.print(F("The configuration has been saved to "));
+    Serial.println(filename);
+#endif
+
+    if (doc["mqttBroker"] != "") {
+        doc["mqttParameter"] = true;
+        mqttParameter        = doc["mqttParameter"];
+    }
+
+    // Serialize JSON to file
+    if (serializeJson(doc, file) == 0) {
+#ifdef _DEBUG_
+        Serial.println(F("Failed to write to file"));
 #endif
     }
 
-    serializeJson(json, Serial);
-    serializeJson(json, configFile);
-
-    configFile.close();
-    // end save
-
+    file.close();  // Close the file
 #ifdef _DEBUG_
-    Serial.println(F("\nlocal ip"));
-    Serial.println(WiFi.localIP());
-    Serial.println(WiFi.gatewayIP());
-    Serial.println(WiFi.subnetMask());
-    Serial.println(WiFi.dnsIP());
+    Serial.println(F("Configuration saved"));
 #endif
 
     mqttInit();
+}
+
+// Prints the content of a file to the Serial
+void printFile(fs::FS& fs, const char* filename) {
+    // Open file for reading
+    File file = fs.open(filename, "r");
+    if (!file) {
+#ifdef _DEBUG_
+        Serial.println(F("Failed to open data file"));
+#endif
+        return;
+    }
+
+    // Extract each characters by one by one
+    while (file.available()) {
+        Serial.print((char)file.read());
+    }
+    Serial.println();
+
+    file.close();  // Close the file
+}
+
+void deleteFile(fs::FS& fs, const char* path) {
+#ifdef _DEBUG_
+    Serial.print(F("Deleting file: "));
+    Serial.println(String(path) + "\r\n");
+#endif
+    if (fs.remove(path)) {
+#ifdef _DEBUG_
+        Serial.println(F("- file deleted"));
+#endif
+    } else {
+#ifdef _DEBUG_
+        Serial.println(F("- delete failed"));
+#endif
+    }
 }
 
 //----------------- Wifi Manager --------------//
@@ -210,7 +229,7 @@ void wifiManagerSetup() {
 #ifdef _DEBUG_
     Serial.println(F("Loading configuration..."));
 #endif
-    loadConfigration();
+    loadConfiguration(LittleFS, filename);
 
     // add all your parameters here
     wifiManager.addParameter(&customMqttBroker);
@@ -219,16 +238,20 @@ void wifiManagerSetup() {
     wifiManager.addParameter(&customMqttPass);
 
     wifiManager.setDarkMode(true);
-    // wifiManager.setConfigPortalTimeout(60);  // auto close configportal after 30 seconds
+    // wifiManager.setConfigPortalTimeout(60);
     wifiManager.setConfigPortalBlocking(false);
 #ifdef _DEBUG_
     Serial.println(F("Saving configuration..."));
 #endif
-    wifiManager.setSaveConfigCallback(saveConfigCallback);
+    wifiManager.setSaveParamsCallback(saveParamsCallback);
+#ifdef _DEBUG_
+    Serial.println(F("Print config file..."));
+#endif
+    printFile(LittleFS, filename);
 
     if (wifiManager.autoConnect(deviceName, "password")) {
 #ifdef _DEBUG_
-        Serial.println(F("connected...yeey :D"));
+        Serial.println(F("WiFI is connected :D"));
 #endif
     } else {
 #ifdef _DEBUG_
@@ -346,17 +369,16 @@ void resetWifiBtPressed(Button2& btn) {
 #ifdef _DEBUG_
     Serial.println(F("Deleting the config file and resetting WiFi."));
 #endif
-    SPIFFS.format();
+    deleteFile(LittleFS, filename);
     wifiManager.resetSettings();
-#ifdef _DEBUG_
     Serial.print(deviceName);
+#ifdef _DEBUG_
     Serial.println(F(" is restarting."));
 #endif
     ESP.restart();
+    delay(3000);
 }
 
-
-    
 void toggleTestLed(Button2& btn) {
     testLed.toggle();
     if (testLed.getOnOff() == LED_MODE_ON) {
