@@ -109,8 +109,7 @@ void loadConfiguration(fs::FS& fs, const char* filename) {
     // Open file for reading
     File file = fs.open(filename, "r");
     if (!file) {
-
-        Serial.println(F("Failed to open data file"));
+        _delnF("Failed to open data file");
 
         return;
     }
@@ -120,9 +119,7 @@ void loadConfiguration(fs::FS& fs, const char* filename) {
     // Deserialize the JSON document
     DeserializationError error = deserializeJson(doc, file);
     if (error) {
-
-        Serial.println(F("Failed to read file, using default configuration"));
-
+        _delnF("Failed to read file, using default configuration");
     }
     // Copy values from the JsonDocument to the Config
     // strlcpy(Destination_Variable, doc["Source_Variable"] /*| "Default_Value"*/, sizeof(Destination_Name));
@@ -150,10 +147,8 @@ void saveState(bool var, const char* key, bool state) {
     var = state;
     pf.putBool(key, state);
 
-    Serial.print(key);
-    Serial.print(F(": "));
-    Serial.println(pf.getBool(kAirPumpSt));
-
+    _deF(key);
+    _deVarln(": ", pf.getBool(kAirPumpSt));
 }
 
 void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
@@ -174,21 +169,17 @@ void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
 }
 
 void mqttInit() {
-
-    Serial.print(F("MQTT parameters are "));
+    _deF("MQTT parameters are ");
 
     if (mqttParameter) {
-
-        Serial.println(F(" available"));
+        _delnF(" available");
 
         mqtt.setBufferSize(512);
         mqtt.setCallback(handleMqttMessage);
         mqtt.setServer(mqttBroker, atoi(mqttPort));
         tConnectMqtt.start();
     } else {
-
-        Serial.println(F(" not available."));
-
+        _delnF(" not available.");
     }
 }
 
@@ -199,16 +190,13 @@ void saveParamsCallback() {
     strcpy(mqttUser, customMqttUser.getValue());
     strcpy(mqttPass, customMqttPass.getValue());
 
-    Serial.println(F("The values are updated."));
-
+    _delnF("The values are updated.");
 
     // Delete existing file, otherwise the configuration is appended to the file
     // LittleFS.remove(filename);
     File file = LittleFS.open(filename, "w");
     if (!file) {
-
-        Serial.println(F("Failed to open config file for writing"));
-
+        _delnF("Failed to open config file for writing");
         return;
     }
 
@@ -219,10 +207,6 @@ void saveParamsCallback() {
     doc["mqttPort"]   = mqttPort;
     doc["mqttUser"]   = mqttUser;
     doc["mqttPass"]   = mqttPass;
-
-    Serial.print(F("The configuration has been saved to "));
-    Serial.println(filename);
-
 
     if (doc["mqttBroker"] != "") {
         doc["mqttParameter"] = true;
@@ -241,10 +225,7 @@ void saveParamsCallback() {
         _delnF("Configuration saved successfully");
     }
 
-    file.close();  // Close the file
-
-    Serial.println(F("Configuration saved"));
-
+    file.close();
 
     mqttInit();
 }
@@ -324,9 +305,7 @@ void wifiManagerSetup() {
 }
 
 void subscribeMqtt() {
-
-    Serial.println(F("Subscribing to the MQTT topics..."));
-
+    _delnF("Subscribing to the MQTT topics...");
     mqtt.subscribe(commandTopicAirPumpSw);
 }
 //----------------- Add MQTT Entities to HA ---//
@@ -337,7 +316,7 @@ void addMqttEntities() {
 
     JsonDocument doc;
 
-    Serial.println(F("Adding the DHT22Temp entity"));
+    _delnF("Adding the DHT22Temp entity");
 
     doc.clear();
     doc["name"]                = "Temp";
@@ -356,8 +335,7 @@ void addMqttEntities() {
     mqtt.publish(configTopicDht22Humi, "", true);
 #endif
 
-
-    Serial.println(F("Adding the DHT22Humi entity"));
+    _delnF("Adding the DHT22Humi entity");
 
     doc.clear();
     doc["name"]                = "Humi";
@@ -376,8 +354,7 @@ void addMqttEntities() {
     mqtt.publish(configTopicDht22Humi, "", true);
 #endif
 
-
-    Serial.println(F("Adding the airPumpSw entity"));
+    _delnF("Adding the airPumpSw entity");
 
     doc.clear();
     doc["name"]               = "Switch";
@@ -424,11 +401,8 @@ void reconnectMqtt() {
             addMqttEntities();
             publishMqtt();
         } else {
-
-            Serial.print(F("failed state: "));
-            Serial.println(mqtt.state());
-            Serial.print(F("counter: "));
-            Serial.println(tReconnectMqtt.counter());
+            _deVar("failed state: ", mqtt.state());
+            _deVarln(" | counter: ", tReconnectMqtt.counter());
 
             if (tReconnectMqtt.counter() >= 3) {
                 tReconnectMqtt.stop();
@@ -438,9 +412,7 @@ void reconnectMqtt() {
         }
     } else {
         if (tReconnectMqtt.counter() <= 1) {
-
-            Serial.println(F("WiFi is not connected"));
-
+            _delnF("WiFi is not connected");
         }
     }
 }
@@ -480,9 +452,8 @@ void toggleTestLed(Button2& btn) {
 void updateAirPumpState() {
     airPumpState = pf.getBool(kAirPumpSt, false);
 
-    Serial.print(kAirPumpSt);
-    Serial.print(F(": "));
-    Serial.println(airPumpState);
+    _deF(kAirPumpSt);
+    _deVarln(": ", airPumpState);
 
     airPumpState ? airPump.turnON() : airPump.turnOFF();
 }
@@ -491,11 +462,10 @@ void readSendData() {
     temp = dht.readTemperature();
     humi = dht.readHumidity();
 
-    Serial.print(F("Temp: "));
-    Serial.print(temp);
-    Serial.print(F(" °C, Humi: "));
-    Serial.print(humi);
-    Serial.println(F(" %"));
+    _deVar("Temp: ", temp);
+    _deF(" °C");
+    _deVar(" | Humi: ", humi);
+    _delnF(" %");
 
     mqtt.publish(stateTopicDht22Temp, String(temp).c_str());
     mqtt.publish(stateTopicDht22Humi, String(humi).c_str());
