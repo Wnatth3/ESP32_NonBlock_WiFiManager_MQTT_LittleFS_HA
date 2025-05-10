@@ -1,11 +1,3 @@
-/*
-0.1 - Update ArduinoJson to 7.2.1
-    - Update ezLED to 2.3.2
-0.0 - Base on ESP32_WiFiManager_MQTT_SPIFFS_NonBlock
-    - Change Serial.print to DebugMode
-    - You can use wifi without MQTT Broker by removing the MQTT Broker field on web UI.
-*/
-
 #include <Arduino.h>
 #include <FS.h>
 #include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
