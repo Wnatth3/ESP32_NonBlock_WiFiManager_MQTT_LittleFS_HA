@@ -14,7 +14,7 @@
 #define _DEBUG_  // Comment this line if you don't want to debug
 #include "Debug.h"
 
-// #define CUSTOM_IP // Uncomment this line if you want to use DHCP
+// #define _CUSTOM_IP // Uncomment this line if you want to use DHCP
 
 // #define _RemoveEntity  // Uncomment this line if you want to remove the entity from Home Assistant
 
@@ -42,7 +42,7 @@ Button2 resetWifiBt;
 //----------------- WiFi Manager --------------//
 const char* filename = "/config.txt";  // Config file name
 
-#ifdef CUSTOM_IP
+#ifdef _CUSTOM_IP
 // default custom static IP
 char static_ip[16]  = "192.168.0.191";
 char static_gw[16]  = "192.168.0.1";
@@ -121,7 +121,7 @@ void loadConfiguration(fs::FS& fs, const char* filename) {
     strlcpy(mqttPass, doc["mqttPass"], sizeof(mqttPass));
     mqttParameter = doc["mqttParameter"];
 
-#ifdef CUSTOM_IP
+#ifdef _CUSTOM_IP
     if (doc["ip"]) {
         strlcpy(static_ip, doc["ip"], sizeof(static_ip));
         strlcpy(static_gw, doc["gateway"], sizeof(static_gw));
@@ -204,7 +204,7 @@ void saveParamsCallback() {
         doc["mqttParameter"] = true;
         mqttParameter        = doc["mqttParameter"];
     }
-#ifdef CUSTOM_IP
+#ifdef _CUSTOM_IP
     doc["ip"]      = WiFi.localIP().toString();
     doc["gateway"] = WiFi.gatewayIP().toString();
     doc["subnet"]  = WiFi.subnetMask().toString();
@@ -262,7 +262,7 @@ void wifiManagerSetup() {
     // reset settings - wipe credentials for testing
     // wifiManager.resetSettings();
 
-#ifdef CUSTOM_IP
+#ifdef _CUSTOM_IP
     // set static ip
     IPAddress _ip, _gw, _sn, _dns;
     _ip.fromString(static_ip);
