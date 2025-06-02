@@ -302,15 +302,14 @@ void subscribeMqtt() {
 }
 //----------------- Add MQTT Entities to HA ---//
 void addMqttEntities() {
-    char dht22TempBuff[512];
-    char dht22HumiBuff[512];
-    char airPupmSwBuff[512];
+    char buff[512];
 
     JsonDocument doc;
 
     _delnF("Adding the DHT22Temp entity");
 
     doc.clear();
+    memset(buff, 0, sizeof(buff)); // Clear the buffer
     doc["name"]                = "Temp";
     doc["unique_id"]           = "dht22Temp";
     doc["state_topic"]         = stateTopicDht22Temp;
@@ -320,9 +319,9 @@ void addMqttEntities() {
     device["identifiers"][0]   = "dht22";
     device["name"]             = "DHT22";
     doc.shrinkToFit();  // optional
-    serializeJson(doc, dht22TempBuff);
+    serializeJson(doc, buff);
 #ifndef _RemoveEntity
-    mqtt.publish(configTopicDht22Humi, dht22TempBuff, true);
+    mqtt.publish(configTopicDht22Humi, buff, true);
 #else
     mqtt.publish(configTopicDht22Humi, "", true);
 #endif
@@ -330,6 +329,7 @@ void addMqttEntities() {
     _delnF("Adding the DHT22Humi entity");
 
     doc.clear();
+    memset(buff, 0, sizeof(buff)); // Clear the buffer
     doc["name"]                = "Humi";
     doc["unique_id"]           = "dht22Humi";
     doc["state_topic"]         = stateTopicDht22Humi;
@@ -339,9 +339,9 @@ void addMqttEntities() {
     device1["identifiers"][0]  = "dht22";
     device1["name"]            = "DHT22";
     doc.shrinkToFit();  // optional
-    serializeJson(doc, dht22HumiBuff);
+    serializeJson(doc, buff);
 #ifndef _RemoveEntity
-    mqtt.publish(configTopicDht22Humi, dht22HumiBuff, true);
+    mqtt.publish(configTopicDht22Humi, buff, true);
 #else
     mqtt.publish(configTopicDht22Humi, "", true);
 #endif
@@ -349,6 +349,7 @@ void addMqttEntities() {
     _delnF("Adding the airPumpSw entity");
 
     doc.clear();
+    memset(buff, 0, sizeof(buff)); // Clear the buffer
     doc["name"]               = "Switch";
     doc["unique_id"]          = "airPumpSw";
     doc["state_topic"]        = stateTopicAirPumpSw;
@@ -363,9 +364,9 @@ void addMqttEntities() {
     device3["identifiers"][0] = "airPump";
     device3["name"]           = "Air Pump";
     doc.shrinkToFit();  // optional
-    serializeJson(doc, airPupmSwBuff);
+    serializeJson(doc, buff);
 #ifndef _RemoveEntity
-    mqtt.publish(configTopicAirPumpSw, airPupmSwBuff, true);
+    mqtt.publish(configTopicAirPumpSw, buff, true);
 #else
     mqtt.publish(configTopicAirPumpSw, "", true);
 #endif
