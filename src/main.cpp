@@ -309,7 +309,7 @@ void addMqttEntities() {
     _delnF("Adding the DHT22Temp entity");
 
     doc.clear();
-    memset(buff, 0, sizeof(buff)); // Clear the buffer
+    memset(buff, 0, sizeof(buff));  // Clear the buffer
     doc["name"]                = "Temp";
     doc["unique_id"]           = "dht22Temp";
     doc["state_topic"]         = stateTopicDht22Temp;
@@ -329,7 +329,7 @@ void addMqttEntities() {
     _delnF("Adding the DHT22Humi entity");
 
     doc.clear();
-    memset(buff, 0, sizeof(buff)); // Clear the buffer
+    memset(buff, 0, sizeof(buff));  // Clear the buffer
     doc["name"]                = "Humi";
     doc["unique_id"]           = "dht22Humi";
     doc["state_topic"]         = stateTopicDht22Humi;
@@ -349,7 +349,7 @@ void addMqttEntities() {
     _delnF("Adding the airPumpSw entity");
 
     doc.clear();
-    memset(buff, 0, sizeof(buff)); // Clear the buffer
+    memset(buff, 0, sizeof(buff));  // Clear the buffer
     doc["name"]               = "Switch";
     doc["unique_id"]          = "airPumpSw";
     doc["state_topic"]        = stateTopicAirPumpSw;
